@@ -199,6 +199,38 @@ func getYoutubeClient(ctx context.Context) (*youtube.Service, error) {
 	return youtubeClient, nil
 }
 
+// Helper function to get MIME type based on file extension
+func getMimeType(filename string) string {
+	switch {
+	case strings.HasSuffix(filename, ".js"):
+		return "application/javascript; charset=utf-8"
+	case strings.HasSuffix(filename, ".mjs"):
+		return "application/javascript; charset=utf-8"
+	case strings.HasSuffix(filename, ".css"):
+		return "text/css; charset=utf-8"
+	case strings.HasSuffix(filename, ".html"):
+		return "text/html; charset=utf-8"
+	case strings.HasSuffix(filename, ".png"):
+		return "image/png"
+	case strings.HasSuffix(filename, ".jpg"), strings.HasSuffix(filename, ".jpeg"):
+		return "image/jpeg"
+	case strings.HasSuffix(filename, ".svg"):
+		return "image/svg+xml"
+	case strings.HasSuffix(filename, ".ico"):
+		return "image/x-icon"
+	case strings.HasSuffix(filename, ".woff"):
+		return "font/woff"
+	case strings.HasSuffix(filename, ".woff2"):
+		return "font/woff2"
+	case strings.HasSuffix(filename, ".ttf"):
+		return "font/ttf"
+	case strings.HasSuffix(filename, ".json"):
+		return "application/json"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 func main() {
 	app := fiber.New()
 	app.Use(cors.New())
@@ -247,10 +279,20 @@ func main() {
 			filePath = "index.html"
 		}
 
-		// Try to read the file
+		// Try to read the file first
 		content, err := fs.ReadFile(staticFileSystem, filePath)
 		if err != nil {
-			// If file not found, serve index.html for SPA routing
+			// If it's an asset file that doesn't exist, return 404
+			if strings.Contains(filePath, "/assets/") ||
+				strings.HasSuffix(filePath, ".js") ||
+				strings.HasSuffix(filePath, ".css") ||
+				strings.HasSuffix(filePath, ".png") ||
+				strings.HasSuffix(filePath, ".svg") ||
+				strings.HasSuffix(filePath, ".ico") {
+				return c.Status(404).SendString("File not found")
+			}
+
+			// For other routes (SPA routing), serve index.html
 			indexContent, indexErr := fs.ReadFile(staticFileSystem, "index.html")
 			if indexErr != nil {
 				return c.Status(404).SendString("index.html not found")
@@ -259,21 +301,17 @@ func main() {
 			return c.Send(indexContent)
 		}
 
-		// Set proper content type and headers based on file extension
-		if strings.HasSuffix(filePath, ".js") {
-			c.Set("Content-Type", "application/javascript; charset=utf-8")
+		// Set proper content type based on file extension
+		mimeType := getMimeType(filePath)
+		c.Set("Content-Type", mimeType)
+
+		// Set cache headers for static assets
+		if strings.HasSuffix(filePath, ".js") ||
+			strings.HasSuffix(filePath, ".css") ||
+			strings.HasSuffix(filePath, ".png") ||
+			strings.HasSuffix(filePath, ".svg") ||
+			strings.HasSuffix(filePath, ".ico") {
 			c.Set("Cache-Control", "public, max-age=31536000")
-		} else if strings.HasSuffix(filePath, ".css") {
-			c.Set("Content-Type", "text/css; charset=utf-8")
-			c.Set("Cache-Control", "public, max-age=31536000")
-		} else if strings.HasSuffix(filePath, ".html") {
-			c.Set("Content-Type", "text/html; charset=utf-8")
-		} else if strings.HasSuffix(filePath, ".png") {
-			c.Set("Content-Type", "image/png")
-		} else if strings.HasSuffix(filePath, ".jpg") || strings.HasSuffix(filePath, ".jpeg") {
-			c.Set("Content-Type", "image/jpeg")
-		} else if strings.HasSuffix(filePath, ".svg") {
-			c.Set("Content-Type", "image/svg+xml")
 		}
 
 		return c.Send(content)
