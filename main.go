@@ -247,27 +247,25 @@ func main() {
 			filePath = "index.html"
 		}
 
-		// Debug: log what file we're trying to serve
-		fmt.Printf("Trying to serve: %s\n", filePath)
-
 		// Try to read the file
 		content, err := fs.ReadFile(staticFileSystem, filePath)
 		if err != nil {
-			fmt.Printf("File not found: %s, serving index.html instead\n", filePath)
 			// If file not found, serve index.html for SPA routing
 			indexContent, indexErr := fs.ReadFile(staticFileSystem, "index.html")
 			if indexErr != nil {
 				return c.Status(404).SendString("index.html not found")
 			}
-			c.Set("Content-Type", "text/html")
+			c.Set("Content-Type", "text/html; charset=utf-8")
 			return c.Send(indexContent)
 		}
 
-		// Set proper content type based on file extension
+		// Set proper content type and headers based on file extension
 		if strings.HasSuffix(filePath, ".js") {
 			c.Set("Content-Type", "application/javascript; charset=utf-8")
+			c.Set("Cache-Control", "public, max-age=31536000")
 		} else if strings.HasSuffix(filePath, ".css") {
 			c.Set("Content-Type", "text/css; charset=utf-8")
+			c.Set("Cache-Control", "public, max-age=31536000")
 		} else if strings.HasSuffix(filePath, ".html") {
 			c.Set("Content-Type", "text/html; charset=utf-8")
 		} else if strings.HasSuffix(filePath, ".png") {
@@ -278,7 +276,6 @@ func main() {
 			c.Set("Content-Type", "image/svg+xml")
 		}
 
-		fmt.Printf("Successfully serving: %s (%d bytes)\n", filePath, len(content))
 		return c.Send(content)
 	})
 
