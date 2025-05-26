@@ -1,0 +1,35 @@
+# Environment variables (NEVER commit these!)
+.env
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+youtube-api-test
+main
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Frontend build artifacts (we embed these, so no need to commit)
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
