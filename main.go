@@ -236,7 +236,17 @@ func main() {
 		Root:         http.FS(staticFileSystem),
 		Index:        "index.html",
 		NotFoundFile: "index.html",
+		Browse:       false,
 	}))
 
-	app.Listen(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	fmt.Printf("🚀 Server running on port %s\n", port)
+	fmt.Println("📍 API endpoint: POST /api/playlist/analyze")
+	fmt.Println("🌐 Frontend available at: /")
+
+	app.Listen(":" + port)
 }
