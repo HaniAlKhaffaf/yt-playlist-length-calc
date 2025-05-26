@@ -33,7 +33,7 @@ const PlaylistLengthCalculator = () => {
         setResult(null);
 
         try {
-            const response = await fetch(`http://localhost:8080/api/playlist/analyze`, {
+            const response = await fetch(`/api/playlist/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
