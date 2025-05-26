@@ -231,31 +231,20 @@ func main() {
 		log.Fatal("Failed to load static files:", err)
 	}
 
-	app.Use("/assets", filesystem.New(filesystem.Config{
-		Root:   http.FS(staticFileSystem),
-		Browse: false,
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:         http.FS(staticFileSystem),
+		Index:        "index.html",
+		NotFoundFile: "index.html",
 	}))
-
-	app.Use("*", func(c *fiber.Ctx) error {
-		indexFile, err := staticFileSystem.Open("index.html")
-		if err != nil {
-			return c.Status(404).SendString("Not found")
-		}
-		defer indexFile.Close()
-
-		indexContent, err := fs.ReadFile(staticFileSystem, "index.html")
-		if err != nil {
-			return c.Status(404).SendString("Not found")
-		}
-
-		c.Set("Content-Type", "text/html")
-		return c.Send(indexContent)
-	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
+	fmt.Printf("🚀 Server running on port %s\n", port)
+	fmt.Println("📍 API endpoint: POST /api/playlist/analyze")
+	fmt.Println("🌐 Frontend available at: /")
 
 	app.Listen(":" + port)
 }
