@@ -32,4 +32,4 @@ frontend/.vite/
 
 # OS files
 .DS_Store
-Thumbs.db
+Thumbs.db# Temporarily including dist for deployment
