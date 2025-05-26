@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -15,14 +12,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 )
-
-//go:embed frontend/dist/*
-var staticFiles embed.FS
 
 type PlaylistRequest struct {
 	YoutubeURL string `json:"youtube_url"`
@@ -202,41 +195,92 @@ func getYoutubeClient(ctx context.Context) (*youtube.Service, error) {
 }
 
 func main() {
-	app := fiber.New()
-	app.Use(cors.New())
+	app := fiber.New(fiber.Config{
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"0.0.0.0/0"},
+	})
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "https://calm-souffle-b21063.netlify.app/",
+		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-Requested-With",
+		AllowCredentials: false,
+	}))
+
 	app.Use(logger.New())
 
-	// API routes
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":  "healthy",
+			"service": "YouTube Playlist Length Calculator API",
+			"version": "1.0.0",
+		})
+	})
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"message": "YouTube Playlist Length Calculator API",
+			"version": "1.0.0",
+			"endpoints": fiber.Map{
+				"health":           "GET /health",
+				"analyze_playlist": "POST /api/playlist/analyze",
+			},
+			"usage": fiber.Map{
+				"method": "POST",
+				"url":    "/api/playlist/analyze",
+				"body": fiber.Map{
+					"youtube_url": "https://www.youtube.com/playlist?list=PLAYLIST_ID",
+				},
+			},
+		})
+	})
+
 	app.Post("/api/playlist/analyze", func(c *fiber.Ctx) error {
 		var request PlaylistRequest
 		if err := c.BodyParser(&request); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request")
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "Invalid request format",
+				"message": "Please provide a valid JSON body with 'youtube_url' field",
+			})
+		}
+
+		if request.YoutubeURL == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "Missing youtube_url",
+				"message": "Please provide a YouTube playlist URL",
+			})
 		}
 
 		playlistId := getPlaylistId(request.YoutubeURL)
 		if playlistId == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid YouTube URL")
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":   "Invalid YouTube URL",
+				"message": "Please provide a valid YouTube playlist URL",
+			})
 		}
 
 		playlist, err := analyzePlaylist(playlistId)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "Failed to analyze playlist",
+				"message": err.Error(),
+			})
 		}
 
 		return c.JSON(playlist)
 	})
 
-	// Serve React static files
-	staticFileSystem, err := fs.Sub(staticFiles, "frontend/dist")
-	if err != nil {
-		log.Fatal("Failed to load static files:", err)
-	}
-
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:         http.FS(staticFileSystem),
-		Index:        "index.html",
-		NotFoundFile: "index.html",
-	}))
+	app.Use(func(c *fiber.Ctx) error {
+		return c.Status(404).JSON(fiber.Map{
+			"error":   "Route not found",
+			"message": "The requested endpoint does not exist",
+			"available_endpoints": []string{
+				"GET /",
+				"GET /health",
+				"POST /api/playlist/analyze",
+			},
+		})
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -244,5 +288,4 @@ func main() {
 	}
 
 	log.Fatal(app.Listen("0.0.0.0:" + port))
-
 }

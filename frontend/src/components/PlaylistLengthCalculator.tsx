@@ -26,6 +26,7 @@ const PlaylistLengthCalculator = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -33,7 +34,9 @@ const PlaylistLengthCalculator = () => {
         setResult(null);
 
         try {
-            const response = await fetch(`/api/playlist/analyze`, {
+            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+            const response = await fetch(`${API_BASE_URL}/api/playlist/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -42,7 +45,8 @@ const PlaylistLengthCalculator = () => {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to fetch playlist data');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || 'Failed to fetch playlist data');
             }
 
             const data: PlaylistResult = await response.json();
