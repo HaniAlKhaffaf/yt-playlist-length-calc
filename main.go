@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
@@ -206,7 +204,7 @@ func main() {
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// API routes
+	// API routes FIRST
 	app.Post("/api/playlist/analyze", func(c *fiber.Ctx) error {
 		var request PlaylistRequest
 		if err := c.BodyParser(&request); err != nil {
@@ -226,17 +224,49 @@ func main() {
 		return c.JSON(playlist)
 	})
 
+	// Extract static files
 	staticFileSystem, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
 		log.Fatal("Failed to load static files:", err)
 	}
 
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:         http.FS(staticFileSystem),
-		Index:        "index.html",
-		NotFoundFile: "index.html",
-	}))
+	// Serve static assets ONLY (not index.html)
+	app.Get("/assets/*", func(c *fiber.Ctx) error {
+		filePath := strings.TrimPrefix(c.Path(), "/")
 
+		file, err := staticFileSystem.Open(filePath)
+		if err != nil {
+			return c.Status(404).SendString("File not found")
+		}
+		defer file.Close()
+
+		// Set proper content type based on file extension
+		if strings.HasSuffix(filePath, ".js") {
+			c.Set("Content-Type", "application/javascript")
+		} else if strings.HasSuffix(filePath, ".css") {
+			c.Set("Content-Type", "text/css")
+		}
+
+		content, err := fs.ReadFile(staticFileSystem, filePath)
+		if err != nil {
+			return c.Status(404).SendString("File not found")
+		}
+
+		return c.Send(content)
+	})
+
+	// Serve index.html for all other routes
+	app.Get("/*", func(c *fiber.Ctx) error {
+		indexContent, err := fs.ReadFile(staticFileSystem, "index.html")
+		if err != nil {
+			return c.Status(404).SendString("Not found")
+		}
+
+		c.Set("Content-Type", "text/html")
+		return c.Send(indexContent)
+	})
+
+	// Use PORT environment variable for Render compatibility
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
