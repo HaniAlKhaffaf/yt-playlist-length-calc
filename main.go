@@ -230,40 +230,56 @@ func main() {
 		log.Fatal("Failed to load static files:", err)
 	}
 
-	// Serve static assets ONLY (not index.html)
-	app.Get("/assets/*", func(c *fiber.Ctx) error {
-		filePath := strings.TrimPrefix(c.Path(), "/")
+	// Serve static files with proper MIME types
+	app.Get("/*", func(c *fiber.Ctx) error {
+		path := c.Path()
 
-		file, err := staticFileSystem.Open(filePath)
-		if err != nil {
-			return c.Status(404).SendString("File not found")
+		// Skip API routes
+		if strings.HasPrefix(path, "/api/") {
+			return c.Next()
 		}
-		defer file.Close()
+
+		// Remove leading slash for file system access
+		filePath := strings.TrimPrefix(path, "/")
+
+		// If requesting root, serve index.html
+		if filePath == "" {
+			filePath = "index.html"
+		}
+
+		// Debug: log what file we're trying to serve
+		fmt.Printf("Trying to serve: %s\n", filePath)
+
+		// Try to read the file
+		content, err := fs.ReadFile(staticFileSystem, filePath)
+		if err != nil {
+			fmt.Printf("File not found: %s, serving index.html instead\n", filePath)
+			// If file not found, serve index.html for SPA routing
+			indexContent, indexErr := fs.ReadFile(staticFileSystem, "index.html")
+			if indexErr != nil {
+				return c.Status(404).SendString("index.html not found")
+			}
+			c.Set("Content-Type", "text/html")
+			return c.Send(indexContent)
+		}
 
 		// Set proper content type based on file extension
 		if strings.HasSuffix(filePath, ".js") {
-			c.Set("Content-Type", "application/javascript")
+			c.Set("Content-Type", "application/javascript; charset=utf-8")
 		} else if strings.HasSuffix(filePath, ".css") {
-			c.Set("Content-Type", "text/css")
+			c.Set("Content-Type", "text/css; charset=utf-8")
+		} else if strings.HasSuffix(filePath, ".html") {
+			c.Set("Content-Type", "text/html; charset=utf-8")
+		} else if strings.HasSuffix(filePath, ".png") {
+			c.Set("Content-Type", "image/png")
+		} else if strings.HasSuffix(filePath, ".jpg") || strings.HasSuffix(filePath, ".jpeg") {
+			c.Set("Content-Type", "image/jpeg")
+		} else if strings.HasSuffix(filePath, ".svg") {
+			c.Set("Content-Type", "image/svg+xml")
 		}
 
-		content, err := fs.ReadFile(staticFileSystem, filePath)
-		if err != nil {
-			return c.Status(404).SendString("File not found")
-		}
-
+		fmt.Printf("Successfully serving: %s (%d bytes)\n", filePath, len(content))
 		return c.Send(content)
-	})
-
-	// Serve index.html for all other routes
-	app.Get("/*", func(c *fiber.Ctx) error {
-		indexContent, err := fs.ReadFile(staticFileSystem, "index.html")
-		if err != nil {
-			return c.Status(404).SendString("Not found")
-		}
-
-		c.Set("Content-Type", "text/html")
-		return c.Send(indexContent)
 	})
 
 	// Use PORT environment variable for Render compatibility
