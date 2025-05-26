@@ -26,7 +26,6 @@ const PlaylistLengthCalculator = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -34,7 +33,9 @@ const PlaylistLengthCalculator = () => {
         setResult(null);
 
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+            const API_BASE_URL = import.meta.env.PROD
+                ? 'https://yt-playlist-length-calc-production.up.railway.app/'
+                : 'http://localhost:8080';
 
             const response = await fetch(`${API_BASE_URL}/api/playlist/analyze`, {
                 method: 'POST',

@@ -199,11 +199,9 @@ func main() {
 		TrustedProxies:          []string{"0.0.0.0/0"},
 	})
 
-	// CORS middleware that handles preflight requests properly
 	app.Use(func(c *fiber.Ctx) error {
 		origin := c.Get("Origin")
 
-		// Allow your Netlify domain
 		if origin == "https://calm-souffle-b21063.netlify.app" {
 			c.Set("Access-Control-Allow-Origin", origin)
 		}
@@ -212,7 +210,6 @@ func main() {
 		c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
 		c.Set("Access-Control-Max-Age", "86400")
 
-		// CRITICAL: Handle OPTIONS preflight requests
 		if c.Method() == "OPTIONS" {
 			return c.SendStatus(200)
 		}
@@ -222,7 +219,6 @@ func main() {
 
 	app.Use(logger.New())
 
-	// Explicitly handle OPTIONS for your API endpoint
 	app.Options("/api/playlist/analyze", func(c *fiber.Ctx) error {
 		c.Set("Access-Control-Allow-Origin", "https://calm-souffle-b21063.netlify.app")
 		c.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -230,7 +226,6 @@ func main() {
 		return c.SendStatus(200)
 	})
 
-	// Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":  "healthy",
@@ -239,7 +234,6 @@ func main() {
 		})
 	})
 
-	// API info endpoint
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"message": "YouTube Playlist Length Calculator API",
@@ -258,24 +252,32 @@ func main() {
 		})
 	})
 
-	// Main API endpoint
 	app.Post("/api/playlist/analyze", func(c *fiber.Ctx) error {
-		var request PlaylistRequest
-		if err := c.BodyParser(&request); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":   "Invalid request format",
-				"message": "Please provide a valid JSON body with 'youtube_url' field",
-			})
+		c.Set("Access-Control-Allow-Origin", "https://calm-souffle-b21063.netlify.app")
+
+		var youtubeURL string
+
+		if formURL := c.FormValue("youtube_url"); formURL != "" {
+			youtubeURL = formURL
+		} else {
+			var request PlaylistRequest
+			if err := c.BodyParser(&request); err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error":   "Invalid request format",
+					"message": "Please provide youtube_url in form data or JSON",
+				})
+			}
+			youtubeURL = request.YoutubeURL
 		}
 
-		if request.YoutubeURL == "" {
+		if youtubeURL == "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error":   "Missing youtube_url",
 				"message": "Please provide a YouTube playlist URL",
 			})
 		}
 
-		playlistId := getPlaylistId(request.YoutubeURL)
+		playlistId := getPlaylistId(youtubeURL)
 		if playlistId == "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error":   "Invalid YouTube URL",
@@ -294,7 +296,6 @@ func main() {
 		return c.JSON(playlist)
 	})
 
-	// 404 handler for undefined routes
 	app.Use(func(c *fiber.Ctx) error {
 		return c.Status(404).JSON(fiber.Map{
 			"error":   "Route not found",
@@ -311,12 +312,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
-	fmt.Printf("🚀 YouTube Playlist API Server starting on port %s\n", port)
-	fmt.Printf("📍 Health check: GET /health\n")
-	fmt.Printf("📍 API info: GET /\n")
-	fmt.Printf("📍 Analyze playlist: POST /api/playlist/analyze\n")
-	fmt.Printf("🌍 CORS configured for: https://calm-souffle-b21063.netlify.app\n")
 
 	log.Fatal(app.Listen("0.0.0.0:" + port))
 }
