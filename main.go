@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
@@ -199,44 +201,12 @@ func getYoutubeClient(ctx context.Context) (*youtube.Service, error) {
 	return youtubeClient, nil
 }
 
-// Helper function to get MIME type based on file extension
-func getMimeType(filename string) string {
-	switch {
-	case strings.HasSuffix(filename, ".js"):
-		return "application/javascript; charset=utf-8"
-	case strings.HasSuffix(filename, ".mjs"):
-		return "application/javascript; charset=utf-8"
-	case strings.HasSuffix(filename, ".css"):
-		return "text/css; charset=utf-8"
-	case strings.HasSuffix(filename, ".html"):
-		return "text/html; charset=utf-8"
-	case strings.HasSuffix(filename, ".png"):
-		return "image/png"
-	case strings.HasSuffix(filename, ".jpg"), strings.HasSuffix(filename, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(filename, ".svg"):
-		return "image/svg+xml"
-	case strings.HasSuffix(filename, ".ico"):
-		return "image/x-icon"
-	case strings.HasSuffix(filename, ".woff"):
-		return "font/woff"
-	case strings.HasSuffix(filename, ".woff2"):
-		return "font/woff2"
-	case strings.HasSuffix(filename, ".ttf"):
-		return "font/ttf"
-	case strings.HasSuffix(filename, ".json"):
-		return "application/json"
-	default:
-		return "application/octet-stream"
-	}
-}
-
 func main() {
 	app := fiber.New()
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// API routes FIRST
+	// API routes
 	app.Post("/api/playlist/analyze", func(c *fiber.Ctx) error {
 		var request PlaylistRequest
 		if err := c.BodyParser(&request); err != nil {
@@ -256,76 +226,20 @@ func main() {
 		return c.JSON(playlist)
 	})
 
-	// Extract static files
+	// Serve React static files
 	staticFileSystem, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
 		log.Fatal("Failed to load static files:", err)
 	}
 
-	// Serve static files with proper MIME types
-	app.Get("/*", func(c *fiber.Ctx) error {
-		path := c.Path()
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:         http.FS(staticFileSystem),
+		Index:        "index.html",
+		NotFoundFile: "index.html",
+	}))
 
-		// Skip API routes
-		if strings.HasPrefix(path, "/api/") {
-			return c.Next()
-		}
-
-		// Remove leading slash for file system access
-		filePath := strings.TrimPrefix(path, "/")
-
-		// If requesting root, serve index.html
-		if filePath == "" {
-			filePath = "index.html"
-		}
-
-		// Try to read the file first
-		content, err := fs.ReadFile(staticFileSystem, filePath)
-		if err != nil {
-			// If it's an asset file that doesn't exist, return 404
-			if strings.Contains(filePath, "/assets/") ||
-				strings.HasSuffix(filePath, ".js") ||
-				strings.HasSuffix(filePath, ".css") ||
-				strings.HasSuffix(filePath, ".png") ||
-				strings.HasSuffix(filePath, ".svg") ||
-				strings.HasSuffix(filePath, ".ico") {
-				return c.Status(404).SendString("File not found")
-			}
-
-			// For other routes (SPA routing), serve index.html
-			indexContent, indexErr := fs.ReadFile(staticFileSystem, "index.html")
-			if indexErr != nil {
-				return c.Status(404).SendString("index.html not found")
-			}
-			c.Set("Content-Type", "text/html; charset=utf-8")
-			return c.Send(indexContent)
-		}
-
-		// Set proper content type based on file extension
-		mimeType := getMimeType(filePath)
-		c.Set("Content-Type", mimeType)
-
-		// Set cache headers for static assets
-		if strings.HasSuffix(filePath, ".js") ||
-			strings.HasSuffix(filePath, ".css") ||
-			strings.HasSuffix(filePath, ".png") ||
-			strings.HasSuffix(filePath, ".svg") ||
-			strings.HasSuffix(filePath, ".ico") {
-			c.Set("Cache-Control", "public, max-age=31536000")
-		}
-
-		return c.Send(content)
-	})
-
-	// Use PORT environment variable for Render compatibility
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-
-	fmt.Printf("🚀 Server running on port %s\n", port)
-	fmt.Println("📍 API endpoint: POST /api/playlist/analyze")
-	fmt.Println("🌐 Frontend available at: /")
-
-	app.Listen(":" + port)
 }
